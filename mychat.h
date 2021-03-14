@@ -23,7 +23,6 @@
 using namespace std;
 
 #define SA struct sockaddr
-#define SERVERPORT 12356
 #define MAXLINE 1024
 
 #endif //_MY_CHAT
