@@ -1,21 +1,20 @@
 #include "../mychat.h"
+#include "../myconst.h"
+#include "childprocess.h"
+#include "transferDescriptor.h"
 
-#define LISTENQ 80 //allow max connect
-#define SERVERPORT 12356//server port
-#define FORK_NUM 10//process pool
-
-pid_t child_make(int , int , int );
-void sig_int(int signo);
-static pid_t *pids;
+void child_make(int, int, Child *);
+void child_main(int , int, int);
+void  sig_int(int);
 
 int main(int argc, char *argv[])
 {
     int listenfd, connfd;
     socklen_t len;
-    listenfd = socket(AF_INET, SOCK_STREAM, 0);
-    char buff[MAXLINE];
-
     struct sockaddr_in seraddr, cliaddr;
+    fd_set rset, masterset;
+
+    listenfd = socket(AF_INET, SOCK_STREAM, 0);
     bzero(&seraddr, sizeof(seraddr));
     seraddr.sin_family = AF_INET;
     seraddr.sin_port = htons(SERVERPORT);
@@ -23,71 +22,74 @@ int main(int argc, char *argv[])
 
     bind(listenfd, (SA *)&seraddr, sizeof(seraddr));
     listen(listenfd, LISTENQ);
+    len = sizeof(seraddr);
 
-    pids = (pid_t *)calloc(FORK_NUM, sizeof(pid_t));
+    childprocessPoll childPolls;
     for(int ii = 0; ii < FORK_NUM; ii++)
     {
-       pids[ii] = child_make(ii, listenfd, sizeof(seraddr));
+        Child child;
+        child_make(listenfd, len, &child);
+        FD_SET(child.child_pipefd, &masterset);
+        childPolls.SetAt(ii, &child);
     }
-    signal(SIGINT, sig_int);
-    for(;;)
-    {
-        pause();
 
-    }
-    
+    //signal(SIGINT, sig_int);
+
 
     return 0;
 }
 
-void sig_int(int signo)
+void child_make(int listenfd, int addrlen, Child *child)
 {
-    for(int ii = 0; ii < FORK_NUM; ii++)
-    {
-        kill(pids[ii], SIGTERM);
-        cout<<"kill Child: "<<pids[ii]<<endl;
-    }
-
-    while(wait(NULL) > 0)
-        ;
-    if(errno != ECHILD)
-    {
-        cout<<"wait error"<<endl;
-        exit(0);
-    }
-    exit(0);
-}
-
-pid_t child_make(int i, int listenfd, int addrlen)
-{   
+    int sockfd[2];
     pid_t pid;
-    void child_main(int, int, int);
-    if( (pid = fork()) > 0)
-        return (pid);
-    
-    child_main(i, listenfd, addrlen);
-    printf("The child %ld stop", (long)getpid());
-    exit(0);
+
+    socketpair(AF_LOCAL, SOCK_STREAM, 0, sockfd);
+
+    if( (pid = fork()) > 0 )
+    {
+        child->child_pid = pid;
+        child->child_pipefd = sockfd[0];
+        child->child_status = 0;//unused
+        return; //parent return
+    }
+
+    //dup2(sockfd[1], STDERR_FILENO);
+    close(sockfd[0]);
+    close(sockfd[1]);
+    close(listenfd);
+    child_main(listenfd, addrlen, sockfd[1]);
 }
 
-void child_main(int i, int listenfd, int addrlen)
+void child_main(int listenfd, int addrlen, int fd)
 {
+    char c;
     int connfd;
-    socklen_t len;
-    struct sockaddr_in cliaddr;
-    printf("child %ld starting\n", (long)getpid());
-    int n;
-    char buff[MAXLINE];
+    ssize_t n;
+
+    cout<<"child starting: "<<getpid()<<endl;
+
     for(;;)
     {
-        len = addrlen;
-        connfd = accept(listenfd, (SA *)&cliaddr, &len);
-        printf("chlid %ld accept\n", (long)getpid());
-        while( (n = read(connfd,buff, MAXLINE)) > 0)
+        if( (n = read_fd(fd, &c, 1, &connfd)) == 0)
+        { 
+            cout<<"read_fd returned 0"<<endl;
+            exit(-1);
+        }
+        if(connfd < 0)
         {
-             cout<<inet_ntoa(cliaddr.sin_addr)<<": "<<buff<<endl;
-             write(connfd, buff , strlen(buff));
+            cout<<"no descriptor from read_fd"<<endl;
+            exit(-1);
+        }
+        char buff[MAXLINE];
+        while( (n = read(connfd, buff, MAXLINE)) > 0)
+        {
+            //cout<<"read from: "<<inet_ntoa(cliaddr.sin_addr)<<endl;
+            cout<<"Child process :"<<getpid()<<endl;
+            cout<<"Message: "<<buff<<endl;
+            write(connfd, buff, n);
         }
         close(connfd);
+        write(fd,"", 1);
     }
 }

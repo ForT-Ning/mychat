@@ -19,6 +19,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <string.h>
+#include <assert.h>
 
 using namespace std;
 
