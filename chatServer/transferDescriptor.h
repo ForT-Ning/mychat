@@ -26,7 +26,7 @@ ssize_t write_fd(int fd, void *ptr, size_t nbytes, int sendfd)
     iov[0].iov_len = nbytes;
     msg.msg_iov = iov;
     msg.msg_iovlen = 1;
-
+    
     return (sendmsg(fd, &msg, 0));    
 }
 
@@ -55,8 +55,8 @@ ssize_t read_fd(int fd, void *ptr, size_t nbytes, int *recvfd)
 
     if( ( n = recvmsg(fd, &msg, 0)) <= 0)
     {
-        assert(false);
-        return 0;
+        cout<<"read_fd: recvmsg error"<<endl;
+        exit(0);
     }
 
     if((cmptr = CMSG_FIRSTHDR(&msg)) != NULL && cmptr->cmsg_len == CMSG_LEN(sizeof(int)))

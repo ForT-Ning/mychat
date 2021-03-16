@@ -13,8 +13,9 @@ typedef struct
 class childprocessPoll
 {
 private:
+    static int m_count;
+private:
     Child *cptr;
-    int m_count;
 public:
     childprocessPoll(int nCount = -1);
     ~childprocessPoll();
@@ -23,6 +24,7 @@ public:
 public:
     Child GetAt(int index);
     int SetAt(int index,Child *clhild);
+    static int GetCount() { return m_count;};
 };
 
 childprocessPoll::childprocessPoll(int n)
